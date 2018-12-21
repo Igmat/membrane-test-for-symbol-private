@@ -15,9 +15,18 @@ function isPrimitive(obj) {
 /**
  * @param {WeakMap<object, any>} originalsToProxies
  * @param {WeakMap<object, any>} proxiesToOriginals
- * @param {(proxy: any) => any} unwrapFn
  */
-function createWrapFn(originalsToProxies, proxiesToOriginals, unwrapFn) {
+function createWrapFn(originalsToProxies, proxiesToOriginals) {
+    /**
+     * @param {any} proxy
+     */
+    function unwrap(proxy) {
+        if (proxiesToOriginals.has(proxy)) {
+            return proxiesToOriginals.get(proxy);
+        }
+        return wrap(proxy);
+    }
+
     /**
      * `privateHandlers` are special objects dedicated to keep invariants built
      * on top of exposing private symbols via public API
@@ -38,12 +47,15 @@ function createWrapFn(originalsToProxies, proxiesToOriginals, unwrapFn) {
      */
     function handlePrivate(handler, privateSymbol) {
         const original = privateHandlersOriginals.get(handler);
+        if (handler.hasOwnProperty(privateSymbol)) {
+            return;
+        }
         Object.defineProperty(handler, privateSymbol, {
             get() {
                 return wrap(original[privateSymbol]);
             },
             set(v) {
-                original[privateSymbol] = unwrapFn(v);
+                original[privateSymbol] = unwrap(v);
             }
         });
     }
@@ -61,18 +73,22 @@ function createWrapFn(originalsToProxies, proxiesToOriginals, unwrapFn) {
         const privateHandler = typeof original === 'function'
             ? () => { }
             : {};
-        privateHandlersOriginals.set(privateHandler, original);
-        allHandlers.add(privateHandler);
+
+        // TODO
+        // privateHandlersOriginals.set(privateHandler, original);
+        // allHandlers.add(privateHandler);
 
         // we use `newProxy` instead of `new Proxy` to emulate behavior of `Symbol.private`
         //       note that we don't use `original` here as proxy target
         //                     ↓↓↓↓↓↓↓↓↓↓↓↓↓↓
-        const proxy = newProxy(privateHandler, {
+        // TODO
+        // const proxy = newProxy(privateHandler, {
+        const proxy = new Proxy(privateHandler, {
             apply(target, thisArg, argArray) {
-                thisArg = unwrapFn(thisArg);
+                thisArg = unwrap(thisArg);
                 for (let i = 0; i < argArray.length; i++) {
                     if (!isPrimitive(argArray[i])) {
-                        argArray[i] = unwrapFn(argArray[i]);
+                        argArray[i] = unwrap(argArray[i]);
                     }
                 }
 
@@ -83,13 +99,14 @@ function createWrapFn(originalsToProxies, proxiesToOriginals, unwrapFn) {
                 // in case when private symbols is exposed via some part of public API
                 // we have to add such symbol to all possible targets where it could appear
                 if (typeof retval === 'symbol' /* && retval.private */) {
-                    allHandlers.forEach(handler => handlePrivate(handler, retval));
+                    // TODO
+                    // allHandlers.forEach(handler => handlePrivate(handler, retval));
                 }
 
-                return wrap(retval);
+                return unwrap(retval);
             },
             get(target, p, receiver) {
-                receiver = unwrapFn(receiver);
+                receiver = unwrap(receiver);
                 //       but we use `original` here instead of `target`
                 //                         ↓↓↓↓↓↓↓↓
                 const retval = Reflect.get(original, p, receiver);
@@ -97,11 +114,21 @@ function createWrapFn(originalsToProxies, proxiesToOriginals, unwrapFn) {
                 // in case when private symbols is exposed via some part of public API
                 // we have to add such symbol to all possible targets where it could appear
                 if (typeof retval === 'symbol' /* && retval.private */) {
-                    allHandlers.forEach(handler => handlePrivate(handler, retval));
+                    // TODO
+                    // allHandlers.forEach(handler => handlePrivate(handler, retval));
                 }
 
-                return wrap(retval);
+                return unwrap(retval);
             },
+            set(target, p, value, receiver) {
+                value = unwrap(value);
+                receiver = unwrap(receiver);
+
+                // but we use `original` here instead of `target`
+                //                 ↓↓↓↓↓↓↓↓
+                return Reflect.set(original, p, value, receiver);
+            },
+
             // following methods also should be implemented,
             // but it they are skipped for simplicity
             // getPrototypeOf(target) { },
@@ -128,23 +155,15 @@ function createWrapFn(originalsToProxies, proxiesToOriginals, unwrapFn) {
 }
 
 /**
- * @param {any} obj
+ * @param {any} graph
  */
-function membrane(obj) {
-    const originalProxies = new WeakMap();
-    const originalTargets = new WeakMap();
-    const outerProxies = new WeakMap();
+function membrane(graph) {
+    const originalsToProxies = new WeakMap();
+    const proxiesToOriginals = new WeakMap();
 
-    const wrap = createWrapFn(originalProxies, originalTargets, unwrap);
-    const wrapOuter = createWrapFn(outerProxies, originalProxies, wrap)
+    const wrap = createWrapFn(originalsToProxies, proxiesToOriginals);
 
-    function unwrap(proxy) {
-        return originalTargets.has(proxy)
-            ? originalTargets.get(proxy)
-            : wrapOuter(proxy);
-    }
-
-    return wrap(obj);
+    return wrap(graph);
 }
 
 exports.membrane = membrane;
