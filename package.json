@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "node index.spec.js"
+    "test": "mocha tests/index.js"
   },
   "repository": {
     "type": "git",
@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/Igmat/membrane-test-for-symbol-private/issues"
   },
-  "homepage": "https://github.com/Igmat/membrane-test-for-symbol-private#readme"
+  "homepage": "https://github.com/Igmat/membrane-test-for-symbol-private#readme",
+  "devDependencies": {
+    "mocha": "5.2.0"
+  }
 }
