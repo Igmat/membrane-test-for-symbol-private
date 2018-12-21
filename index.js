@@ -18,7 +18,7 @@ function isPrimitive(obj) {
  */
 function createWrapFn(originalsToProxies, proxiesToOriginals) {
     /**
-     * @param {proxy} proxy
+     * @param {any} proxy
      */
     function unwrap(proxy) {
         if (proxiesToOriginals.has(proxy)) {
@@ -123,7 +123,7 @@ function createWrapFn(originalsToProxies, proxiesToOriginals) {
                 value = unwrap(value);
                 receiver = unwrap(receiver);
 
-                return Reflect.set(target, p, value, receiver);
+                return Reflect.set(original, p, value, receiver);
             },
 
             // following methods also should be implemented,
