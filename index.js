@@ -82,8 +82,7 @@ function createWrapFn(originalsToProxies, proxiesToOriginals) {
         //       note that we don't use `original` here as proxy target
         //                     ↓↓↓↓↓↓↓↓↓↓↓↓↓↓
         // TODO
-        // const proxy = newProxy(privateHandler, {
-        const proxy = new Proxy(privateHandler, {
+        const proxy = newProxy(privateHandler, {
             apply(target, thisArg, argArray) {
                 thisArg = unwrap(thisArg);
                 for (let i = 0; i < argArray.length; i++) {
