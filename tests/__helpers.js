@@ -48,7 +48,7 @@ function setup(leftField, rightField) {
     }
 
     const graph = {};
-    const wrappedGraph = new membrane(graph);
+    const wrappedGraph = membrane(graph);
     graph.Left = Left;
     wrappedGraph.Right = Right;
 

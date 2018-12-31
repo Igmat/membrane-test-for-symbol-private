@@ -82,7 +82,7 @@ class Side {
 
                 // in case when private symbols is exposed via some part of public API
                 // we have to add such symbol to all possible targets where it could appear
-                if (typeof retval === 'symbol' /* && retval.private */) {
+                if (typeof retval === 'symbol' && !!retval.private) {
                     handlePrivate(retval);
                     otherSide.handlePrivate(retval);
                     exposedSymbols.add(retval);
@@ -98,7 +98,7 @@ class Side {
 
                 // in case when private symbols is exposed via some part of public API
                 // we have to add such symbol to all possible targets where it could appear
-                if (typeof retval === 'symbol' /* && retval.private */) {
+                if (typeof retval === 'symbol' && !!retval.private) {
                     handlePrivate(retval);
                     otherSide.handlePrivate(retval);
                     exposedSymbols.add(retval);
