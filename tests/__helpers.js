@@ -2,12 +2,12 @@ const { membrane } = require('..');
 const assert = require('assert');
 require('./__polyfill');
 
-global.describe = function(name, cb) {
+global.describe = function (name, cb) {
     console.group(name);
     cb();
     console.groupEnd(name);
 }
-global.it = function(name, cb) {
+global.it = function (name, cb) {
     try {
         cb();
         console.log('\x1b[32m', '\u2713', name, '\x1b[0m');
@@ -32,6 +32,15 @@ function setup(leftField, rightField) {
         set(obj, value) {
             obj[leftField] = value;
         },
+        has(obj) {
+            return Reflect.has(obj, leftField);
+        },
+        hasOwn(obj) {
+            return obj.hasOwnProperty(leftField);
+        },
+        hasIn(obj) {
+            return leftField in obj;
+        }
     };
 
     const Right = {
@@ -44,6 +53,15 @@ function setup(leftField, rightField) {
         },
         set(obj, value) {
             obj[rightField] = value;
+        },
+        has(obj) {
+            return Reflect.has(obj, rightField);
+        },
+        hasOwn(obj) {
+            return obj.hasOwnProperty(rightField);
+        },
+        hasIn(obj) {
+            return rightField in obj;
         }
     }
 
@@ -63,19 +81,19 @@ function setup(leftField, rightField) {
     };
 }
 
-exports.stringFields = function() {
+exports.stringFields = function () {
     return setup('leftField', 'rightField');
 }
 
-exports.symbolFields = function() {
+exports.symbolFields = function () {
     return setup(Symbol('leftField'), Symbol('rightField'));
 }
 
-exports.privateSymbolFields = function() {
+exports.privateSymbolFields = function () {
     return setup(Symbol.private('leftField'), Symbol.private('rightField'));
 }
 
-exports.preExposedPrivateSymbolFields = function() {
+exports.preExposedPrivateSymbolFields = function () {
     const membrane = setup(Symbol.private('leftField'), Symbol.private('rightField'));
     // Expose the fields before the tests.
     membrane.wrappedLeftSide.field;
@@ -83,7 +101,7 @@ exports.preExposedPrivateSymbolFields = function() {
     return membrane;
 }
 
-exports.suite = function(setup, set, get) {
+exports.suite = function (setup, set, get, existenceChecks) {
     it('bT[fT] = vT;', () => {
         const {
             Left,
@@ -230,4 +248,49 @@ exports.suite = function(setup, set, get) {
         // Sanity check.
         assert.strictEqual(get(wrappedRightSide, wrappedRightSide.base), wrappedRightSide.value);
     });
+
+    Object.keys(existenceChecks)
+        .forEach(check => {
+            /**
+             * @param {'bT' | 'bP'} baseName
+             * @param {'fT' | 'fP'} fieldName
+             * @param {boolean} [doSet]
+             */
+            function hasCheckInvariant(baseName, fieldName, doSet) {
+                it(`${baseName} ${check} ${fieldName} ${doSet ? 'with' : 'without'} set`, () => {
+                    const {
+                        Left,
+                        Right,
+                        wrappedLeftSide,
+                        wrappedRightSide,
+                    } = setup();
+                    const baseSide = baseName === 'bT'
+                        ? [Left, wrappedLeftSide]
+                        : [Right, wrappedRightSide];
+                    const [originalBaseSide, wrappedBaseSide] = ((baseName === 'bT') !== (fieldName === 'fT'))
+                        ? baseSide.reverse()
+                        : baseSide;
+                    const [originalFieldSide, wrappedFieldSide] = fieldName === 'fT'
+                        ? [Left, wrappedLeftSide]
+                        : [Right, wrappedRightSide];
+                    if (doSet) {
+                        set(originalFieldSide, originalBaseSide.base, true);
+                    }
+                    const original = existenceChecks[check](originalFieldSide, originalBaseSide.base);
+                    const wrapped = existenceChecks[check](wrappedFieldSide, wrappedBaseSide.base);
+
+                    assert.strictEqual(wrapped, original);
+                });
+            }
+            describe(`Existence check by '${check}'`, () => {
+                hasCheckInvariant('bT', 'fT');
+                hasCheckInvariant('bT', 'fT', true);
+                hasCheckInvariant('bT', 'fP');
+                hasCheckInvariant('bT', 'fP', true);
+                hasCheckInvariant('bP', 'fT');
+                hasCheckInvariant('bP', 'fT', true);
+                hasCheckInvariant('bP', 'fP');
+                hasCheckInvariant('bP', 'fP', true);
+            });
+        });
 };
