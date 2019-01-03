@@ -1,4 +1,4 @@
-const { newProxy } = require("./new-proxy");
+const { newProxy } = require('./new-proxy');
 
 /**
  * @param {any} obj
@@ -53,9 +53,13 @@ class Side {
         // so we return originals of outer object in order to not break outer invariants
         if (this.otherSide.proxiesToOriginals.has(original)) return this.otherSide.proxiesToOriginals.get(original);
 
+        const privateHandlerProto = typeof original === 'function'
+            ? () => { }
+            : {};
         const privateHandler = typeof original === 'function'
             ? () => { }
             : {};
+        Object.setPrototypeOf(privateHandler, privateHandlerProto);
 
         this.privateHandlersOriginals.set(privateHandler, original);
         this.allHandlers.add(privateHandler);
@@ -117,18 +121,63 @@ class Side {
 
             // following methods also should be implemented,
             // but it they are skipped for simplicity
-            // getPrototypeOf(target) { },
-            // setPrototypeOf(target, v) { },
-            // isExtensible(target) { },
-            // preventExtensions(target) { },
-            // getOwnPropertyDescriptor(target, p) { },
-            // has(target, p) { },
-            // set(target, p, value, receiver) { },
-            // deleteProperty(target, p) { },
-            // defineProperty(target, p, attributes) { },
-            // enumerate(target) { },
-            // ownKeys(target) { },
-            // construct(target, argArray, newTarget) { },
+            getPrototypeOf(target) {
+                const retval = Reflect.getPrototypeOf(original);
+
+                return wrap(retval);
+            },
+            setPrototypeOf(target, v) {
+                v = unwrap(v);
+
+                return Reflect.setPrototypeOf(original, v);
+            },
+            isExtensible(target) {
+                return Reflect.isExtensible(original);
+            },
+            preventExtensions(target) {
+                return Reflect.isExtensible(original);
+            },
+            getOwnPropertyDescriptor(target, p) {
+                const retval = Reflect.getOwnPropertyDescriptor(original, p);
+
+                return wrap(retval);
+            },
+            has(target, p) {
+                return Reflect.has(original, p);
+            },
+            deleteProperty(target, p) {
+                return Reflect.deleteProperty(original, p);
+            },
+            defineProperty(target, p, attributes) {
+                attributes = unwrap(attributes);
+
+                return Reflect.defineProperty(original, p, attributes);
+            },
+            ownKeys(target) {
+                return Reflect.ownKeys(original);
+            },
+            construct(target, argArray, newTarget) {
+                newTarget = unwrap(newTarget);
+                for (let i = 0; i < argArray.length; i++) {
+                    if (!isPrimitive(argArray[i])) {
+                        argArray[i] = unwrap(argArray[i]);
+                    }
+                }
+
+                //               but we use `original` here instead of `target`
+                //                               ↓↓↓↓↓↓↓↓
+                const retval = Reflect.construct(original, argArray, newTarget);
+
+                // in case when private symbols is exposed via some part of public API
+                // we have to add such symbol to all possible targets where it could appear
+                if (typeof retval === 'symbol' && !!retval.private) {
+                    handlePrivate(retval);
+                    otherSide.handlePrivate(retval);
+                    exposedSymbols.add(retval);
+                }
+
+                return wrap(retval);
+            },
         });
 
         this.originalsToProxies.set(original, proxy);
@@ -162,18 +211,41 @@ class Side {
      */
     addSymbolToPrivateHandler(handler, privateSymbol) {
         const original = this.privateHandlersOriginals.get(handler);
-        if (handler.hasOwnProperty(privateSymbol)) {
-            if (this.exposedSymbols.has(privateSymbol) || this.otherSide.exposedSymbols.has(privateSymbol)) return;
-
-            original[privateSymbol] = this.unwrap(handler[privateSymbol]);
-        }
+        const handlerProto = Object.getPrototypeOf(handler);
         const { wrap, unwrap } = this;
-        Object.defineProperty(handler, privateSymbol, {
+        const propertyHandler = {
             get() {
                 return wrap(original[privateSymbol]);
             },
             set(v) {
                 original[privateSymbol] = unwrap(v);
+            }
+        };
+        if (Object.hasOwnProperty.call(original, privateSymbol)) {
+            const descriptor = Reflect.getOwnPropertyDescriptor(handler, privateSymbol);
+            if (descriptor && !descriptor.configurable) return;
+
+            Object.defineProperty(handler, privateSymbol, propertyHandler);
+
+            return;
+        }
+        if (Object.hasOwnProperty.call(handler, privateSymbol)) {
+            const descriptor = Reflect.getOwnPropertyDescriptor(handler, privateSymbol);
+            if (!descriptor.configurable) return;
+
+            original[privateSymbol] = this.unwrap(handler[privateSymbol]);
+
+            Object.defineProperty(handler, privateSymbol, propertyHandler);
+
+            return;
+        }
+        if (Object.hasOwnProperty.call(handlerProto, privateSymbol)) return;
+        Object.defineProperty(handlerProto, privateSymbol, {
+            get: propertyHandler.get,
+            set(v) {
+                Object.defineProperty(handler, privateSymbol, propertyHandler);
+
+                propertyHandler.set(v);
             }
         });
     }
