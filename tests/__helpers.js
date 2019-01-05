@@ -23,6 +23,7 @@ global.it = function (name, cb) {
 function setup(leftField, rightField) {
     const Left = {
         base: {},
+        someObject: {},
         field: leftField,
         value: { fromTheLeft: true },
 
@@ -45,6 +46,7 @@ function setup(leftField, rightField) {
 
     const Right = {
         base: {},
+        someObject: {},
         field: rightField,
         value: { fromTheRight: true },
 
@@ -119,6 +121,16 @@ exports.suite = function (setup, set, get, existenceChecks) {
         assert.strictEqual(got.fromTheLeft, true);
         // Sanity check.
         assert.strictEqual(get(Left, Left.base), Left.value);
+
+        // has checks
+        Object.keys(existenceChecks)
+            .forEach(check => {
+                assert(existenceChecks[check](Left, Left.base));
+                assert(existenceChecks[check](wrappedLeftSide, wrappedLeftSide.base));
+
+                assert(!existenceChecks[check](Left, Left.someObject));
+                assert(!existenceChecks[check](wrappedLeftSide, wrappedLeftSide.someObject));
+            });
     });
 
     it('bT[fT] = vP;', () => {
@@ -138,6 +150,16 @@ exports.suite = function (setup, set, get, existenceChecks) {
         assert.strictEqual(wrappedRightSide.value.fromTheRight, true);
         // Sanity check.
         assert.strictEqual(get(Left, Left.base), wrappedRightSide.value);
+
+        // has checks
+        Object.keys(existenceChecks)
+            .forEach(check => {
+                assert(existenceChecks[check](Left, Left.base));
+                assert(existenceChecks[check](wrappedLeftSide, wrappedLeftSide.base));
+
+                assert(!existenceChecks[check](Left, Left.someObject));
+                assert(!existenceChecks[check](wrappedLeftSide, wrappedLeftSide.someObject));
+            });
     });
 
     it('bT[fP] = vT;', () => {
@@ -157,6 +179,16 @@ exports.suite = function (setup, set, get, existenceChecks) {
         assert.strictEqual(got.fromTheLeft, true);
         // Sanity check.
         assert.strictEqual(get(wrappedRightSide, Left.base), Left.value);
+
+        // has checks
+        Object.keys(existenceChecks)
+            .forEach(check => {
+                assert(existenceChecks[check](wrappedRightSide, Left.base));
+                assert(existenceChecks[check](Right, wrappedLeftSide.base));
+
+                assert(!existenceChecks[check](wrappedRightSide, Left.someObject));
+                assert(!existenceChecks[check](Right, wrappedLeftSide.someObject));
+            });
     });
 
     it('bT[fP] = vP;', () => {
@@ -175,6 +207,16 @@ exports.suite = function (setup, set, get, existenceChecks) {
         assert.strictEqual(wrappedRightSide.value.fromTheRight, true);
         // Sanity check.
         assert.strictEqual(get(wrappedRightSide, Left.base), wrappedRightSide.value);
+
+        // has checks
+        Object.keys(existenceChecks)
+            .forEach(check => {
+                assert(existenceChecks[check](wrappedRightSide, Left.base));
+                assert(existenceChecks[check](Right, wrappedLeftSide.base));
+
+                assert(!existenceChecks[check](wrappedRightSide, Left.someObject));
+                assert(!existenceChecks[check](Right, wrappedLeftSide.someObject));
+            });
     });
 
     it('bP[fT] = vT;', () => {
@@ -193,6 +235,16 @@ exports.suite = function (setup, set, get, existenceChecks) {
         assert.strictEqual(got.fromTheLeft, true);
         // Sanity check.
         assert.strictEqual(get(Left, wrappedRightSide.base), Left.value);
+
+        // has checks
+        Object.keys(existenceChecks)
+            .forEach(check => {
+                assert(existenceChecks[check](Left, wrappedRightSide.base));
+                assert(existenceChecks[check](wrappedLeftSide, Right.base));
+
+                assert(!existenceChecks[check](Left, wrappedRightSide.someObject));
+                assert(!existenceChecks[check](wrappedLeftSide, Right.someObject));
+            });
     });
 
     it('bP[fT] = vP;', () => {
@@ -211,6 +263,16 @@ exports.suite = function (setup, set, get, existenceChecks) {
         assert.strictEqual(wrappedRightSide.value.fromTheRight, true);
         // Sanity check.
         assert.strictEqual(get(Left, wrappedRightSide.base), wrappedRightSide.value);
+
+        // has checks
+        Object.keys(existenceChecks)
+            .forEach(check => {
+                assert(existenceChecks[check](Left, wrappedRightSide.base));
+                assert(existenceChecks[check](wrappedLeftSide, Right.base));
+
+                assert(!existenceChecks[check](Left, wrappedRightSide.someObject));
+                assert(!existenceChecks[check](wrappedLeftSide, Right.someObject));
+            });
     });
 
     it('bP[fP] = vT;', () => {
@@ -229,6 +291,16 @@ exports.suite = function (setup, set, get, existenceChecks) {
         assert.strictEqual(got.fromTheLeft, true);
         // Sanity check.
         assert.strictEqual(get(wrappedRightSide, wrappedRightSide.base), Left.value);
+
+        // has checks
+        Object.keys(existenceChecks)
+            .forEach(check => {
+                assert(existenceChecks[check](Right, Right.base));
+                assert(existenceChecks[check](wrappedRightSide, wrappedRightSide.base));
+
+                assert(!existenceChecks[check](Right, Right.someObject));
+                assert(!existenceChecks[check](wrappedRightSide, wrappedRightSide.someObject));
+            });
     });
 
     it('bP[fP] = vP;', () => {
@@ -247,6 +319,16 @@ exports.suite = function (setup, set, get, existenceChecks) {
         assert.strictEqual(wrappedRightSide.value.fromTheRight, true);
         // Sanity check.
         assert.strictEqual(get(wrappedRightSide, wrappedRightSide.base), wrappedRightSide.value);
+
+        // has checks
+        Object.keys(existenceChecks)
+            .forEach(check => {
+                assert(existenceChecks[check](Right, Right.base));
+                assert(existenceChecks[check](wrappedRightSide, wrappedRightSide.base));
+
+                assert(!existenceChecks[check](Right, Right.someObject));
+                assert(!existenceChecks[check](wrappedRightSide, wrappedRightSide.someObject));
+            });
     });
 
     Object.keys(existenceChecks)
@@ -279,6 +361,7 @@ exports.suite = function (setup, set, get, existenceChecks) {
                     const original = existenceChecks[check](originalFieldSide, originalBaseSide.base);
                     const wrapped = existenceChecks[check](wrappedFieldSide, wrappedBaseSide.base);
 
+                    assert.strictEqual(original, !!doSet);
                     assert.strictEqual(wrapped, original);
                 });
             }
