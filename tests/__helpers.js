@@ -360,9 +360,17 @@ exports.suite = function (setup, set, get, existenceChecks) {
                     }
                     const original = existenceChecks[check](originalFieldSide, originalBaseSide.base);
                     const wrapped = existenceChecks[check](wrappedFieldSide, wrappedBaseSide.base);
+                    
+                    const someObjectOriginal = existenceChecks[check](originalFieldSide, originalBaseSide.someObject);
+                    const someObjectWrapped = existenceChecks[check](wrappedFieldSide, wrappedBaseSide.someObject);
 
+                    // check that `base` properly answers "does it have `field`" question
                     assert.strictEqual(original, !!doSet);
                     assert.strictEqual(wrapped, original);
+
+                    // check that `someObject` isn't affected by mutation of `base`
+                    assert(!someObjectOriginal);
+                    assert(!someObjectWrapped);
                 });
             }
             describe(`Existence check by '${check}'`, () => {
