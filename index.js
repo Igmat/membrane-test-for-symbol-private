@@ -31,6 +31,7 @@ class Side {
          */
         this.allHandlers = new Set();
         this.exposedSymbols = new Set();
+        this.originalGlobals = (otherSide && otherSide.originalGlobals) || this.augmentGlobals();
         this.otherSide = otherSide || new Side(this);
 
         this.wrap = this.wrap.bind(this);
@@ -52,6 +53,7 @@ class Side {
         // we also don't need to wrap outer proxies, since those objects don't belong to our graph
         // so we return originals of outer object in order to not break outer invariants
         if (this.otherSide.proxiesToOriginals.has(original)) return this.otherSide.proxiesToOriginals.get(original);
+        const { Reflect } = this.originalGlobals;
 
         const privateHandlerProto = typeof original === 'function'
             ? () => { }
@@ -59,7 +61,7 @@ class Side {
         const privateHandler = typeof original === 'function'
             ? () => { }
             : {};
-        Object.setPrototypeOf(privateHandler, privateHandlerProto);
+        Reflect.setPrototypeOf(privateHandler, privateHandlerProto);
 
         this.privateHandlersOriginals.set(privateHandler, original);
         this.allHandlers.add(privateHandler);
@@ -73,7 +75,9 @@ class Side {
         //                     ↓↓↓↓↓↓↓↓↓↓↓↓↓↓
         const proxy = newProxy(privateHandler, {
             apply(target, thisArg, argArray) {
-                thisArg = unwrap(thisArg);
+                thisArg = (original !== Object.hasOwnProperty)
+                    ? unwrap(thisArg)
+                    : thisArg;
                 for (let i = 0; i < argArray.length; i++) {
                     if (!isPrimitive(argArray[i])) {
                         argArray[i] = unwrap(argArray[i]);
@@ -135,7 +139,7 @@ class Side {
                 return Reflect.isExtensible(original);
             },
             preventExtensions(target) {
-                return Reflect.isExtensible(original);
+                return Reflect.preventExtensions(original);
             },
             getOwnPropertyDescriptor(target, p) {
                 const retval = Reflect.getOwnPropertyDescriptor(original, p);
@@ -210,6 +214,7 @@ class Side {
      * @param {symbol} privateSymbol
      */
     addSymbolToPrivateHandler(handler, privateSymbol) {
+        const { Object, Reflect } = this.originalGlobals;
         const original = this.privateHandlersOriginals.get(handler);
         const handlerProto = Object.getPrototypeOf(handler);
         const { wrap, unwrap } = this;
@@ -219,11 +224,12 @@ class Side {
             },
             set(v) {
                 original[privateSymbol] = unwrap(v);
-            }
+            },
+            configurable: true
         };
         if (Object.hasOwnProperty.call(original, privateSymbol)) {
             const descriptor = Reflect.getOwnPropertyDescriptor(handler, privateSymbol);
-            if (descriptor && !descriptor.configurable) return;
+            if (descriptor && !!descriptor.get) return;
 
             Object.defineProperty(handler, privateSymbol, propertyHandler);
 
@@ -231,8 +237,7 @@ class Side {
         }
         if (Object.hasOwnProperty.call(handler, privateSymbol)) {
             const descriptor = Reflect.getOwnPropertyDescriptor(handler, privateSymbol);
-            if (!descriptor.configurable) return;
-
+            if (!!descriptor.get) return;
             original[privateSymbol] = this.unwrap(handler[privateSymbol]);
 
             Object.defineProperty(handler, privateSymbol, propertyHandler);
@@ -248,6 +253,88 @@ class Side {
                 propertyHandler.set(v);
             }
         });
+    }
+
+    augmentGlobals() {
+        // in order to prevent outer code from affecting `membraned` graph directly
+        // by mutating globals that used in Membrane implementation (Object and Reflect)
+        // we have to ensure that our `Membrane` uses original global API's
+        const originals = {
+            Object: {
+                getOwnPropertyDescriptor: Object.getOwnPropertyDescriptor,
+                hasOwnProperty: Object.hasOwnProperty,
+                getPrototypeOf: Object.getPrototypeOf,
+                defineProperty: Object.defineProperty,
+                setPrototypeOf: Object.setPrototypeOf
+            },
+            Reflect: {
+                apply: Reflect.apply,
+                get: Reflect.get,
+                set: Reflect.set,
+                getPrototypeOf: Reflect.getPrototypeOf,
+                setPrototypeOf: Reflect.setPrototypeOf,
+                isExtensible: Reflect.isExtensible,
+                preventExtensions: Reflect.preventExtensions,
+                getOwnPropertyDescriptor: Reflect.getOwnPropertyDescriptor,
+                has: Reflect.has,
+                deleteProperty: Reflect.deleteProperty,
+                defineProperty: Reflect.defineProperty,
+                ownKeys: Reflect.ownKeys,
+                construct: Reflect.construct,
+            },
+        };
+
+        // Since `membraned` code itself could use any global API's,
+        // malicious code could mutate that globals in order to bypass
+        // membrane protection and get original entities of `wrappedGraph`.
+        // Both `Left` and `Right` share same `global` objects, so `globals` don't belong
+        // to none of these graphs - it means that `globals` won't be wrapped by `membrane`.
+        // This fact introduces the way of communication between `Left` and `Right` graphs
+        // ignoring `membrane`. In order to prevent such communication, we have to freeze API's
+        // that could be mutated by malicious code for getting access bypassing `membrane`,
+        // which moves us a little bit closer to `Realms`.
+        // Since, we already have to mutate `globals`, we are able to use this chance
+        // to mutate globals in a way which makes them `membrane`-aware.
+        // Following code isn't `bulletproof` implementation of such mutation, but rather
+        // a PoC that such mutation is possible.
+        const getOriginal = o =>
+            this.privateHandlersOriginals.has(o)
+                ? this.privateHandlersOriginals.get(o)
+                : this.otherSide.privateHandlersOriginals.has(o)
+                    ? this.otherSide.privateHandlersOriginals.get(o)
+                    : o;
+        const isExposed = p => this.exposedSymbols.has(p) || this.otherSide.exposedSymbols.has(p);
+
+        Object.getOwnPropertyDescriptor = function (o, p) {
+            return isExposed(p)
+                ? originals.Object.getOwnPropertyDescriptor(getOriginal(o), p)
+                : originals.Object.getOwnPropertyDescriptor(o, p);
+        };
+        Object.hasOwnProperty = Object.prototype.hasOwnProperty = function (p) {
+            return isExposed(p)
+                ? originals.Object.hasOwnProperty.call(getOriginal(this), p)
+                : originals.Object.hasOwnProperty.call(this, p);
+        };
+
+        Reflect.getOwnPropertyDescriptor = function (o, p) {
+            return isExposed(p)
+                ? originals.Reflect.getOwnPropertyDescriptor(getOriginal(o), p)
+                : originals.Reflect.getOwnPropertyDescriptor(o, p);
+        };
+        Reflect.has = function (o, p) {
+            return isExposed(p)
+                ? originals.Reflect.has(getOriginal(o), p)
+                : originals.Reflect.has(o, p);
+        };
+        // This API's should be adjusted a little bit too
+        // Reflect.defineProperty
+        // Reflect.deleteProperty
+        // Object.defineProperty
+        // Object.defineProperties
+
+        // also, to be `bulletproof` they should be mutated with getter/setter pair and not just by usual assignment
+
+        return originals;
     }
 }
 /**
